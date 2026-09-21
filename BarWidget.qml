@@ -4,7 +4,8 @@ import Quickshell
 import qs.Commons
 import qs.Ui
 
-// GPU Monitor — live view of the AMD graphics card for the Omarchy bar.
+// GPU Monitor — live view of the AMD (sysfs) or NVIDIA (nvidia-smi) graphics
+// card for the Omarchy bar.
 //
 // A thin surface: all live state comes from the shared davidjm.gpu service
 // (bar.shell.serviceFor), which owns the one long-lived `gpumon.py` process

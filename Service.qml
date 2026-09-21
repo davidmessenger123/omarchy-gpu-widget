@@ -15,9 +15,9 @@ import Quickshell.Io
 Item {
   id: root
 
-  // Live board state, published to every widget. Keys: present, card, util,
-  // memUtil, sclkMhz, mclkMhz, tempEdge, tempJunction, tempMem, powerW,
-  // fanRpm, vramUsedG, vramTotalG.
+  // Live board state, published to every widget. Keys: present, vendor,
+  // card, util, memUtil, sclkMhz, mclkMhz, tempEdge, tempJunction, tempMem,
+  // powerW, fanRpm, vramUsedG, vramTotalG.
   property var state: ({})
 
   // Absolute path to this plugin's folder (trailing slash), resolved from the

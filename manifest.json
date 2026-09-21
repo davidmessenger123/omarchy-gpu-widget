@@ -3,10 +3,10 @@
   "schemaVersion": 1,
   "id": "davidjm.gpu",
   "name": "GPU Monitor",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "David JM",
   "license": "MIT",
-  "description": "Live view of the AMD graphics card straight from sysfs: utilization, clocks, temperatures, power draw, fan speed and VRAM usage. One shared service owns a single helper process that feeds every bar surface.",
+  "description": "Live view of the graphics card: utilization, clocks, temperatures, power draw, fan speed and VRAM usage. AMD is read straight from the amdgpu sysfs tree; NVIDIA falls back to nvidia-smi. One shared service owns a single helper process that feeds every bar surface.",
   "kinds": [
     "service",
     "bar-widget"
@@ -18,7 +18,7 @@
   },
   "barWidget": {
     "displayName": "GPU Monitor",
-    "description": "A monitor glyph showing GPU utilization and junction temperature, refreshed every second from the amdgpu sysfs tree. Left-click opens a panel with clocks, VRAM, power, fan and per-sensor temperatures. Read-only and unprivileged — no helpers, no elevation.",
+    "description": "A monitor glyph showing GPU utilization and junction temperature, refreshed every second. AMD is read from the amdgpu sysfs tree, NVIDIA via nvidia-smi. Left-click opens a panel with clocks, VRAM, power, fan and per-sensor temperatures. Read-only and unprivileged — no elevation.",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right",

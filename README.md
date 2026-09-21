@@ -1,11 +1,15 @@
 # davidjm.gpu
 
-Live view of the AMD graphics card for the [Omarchy](https://omarchy.org/)
-shell bar, straight from the `amdgpu` sysfs tree: utilization, clocks,
-junction/edge/memory temperatures, power draw, fan speed and VRAM usage — all
-read-only and unprivileged. A monitor glyph shows utilization + junction
+Live view of the graphics card for the [Omarchy](https://omarchy.org/) shell
+bar: utilization, clocks, temperatures, power draw, fan speed and VRAM usage —
+all read-only and unprivileged. A monitor glyph shows utilization + core
 temperature and turns red at/above your chosen "hot" threshold; left-click
 opens a panel with the full picture.
+
+**AMD** cards are read straight from the `amdgpu` sysfs tree. If no AMD card
+is present, the monitor falls back to any **NVIDIA** GPU and reads it via
+`nvidia-smi`. One card is followed (the first AMD card exposing
+`gpu_busy_percent`, else the first NVIDIA GPU) — no cluster orchestration.
 
 It is built as a **service** plus a thin **bar-widget**: one long-lived
 `gpumon.py` process runs per shell (not per monitor), so a multi-monitor setup
@@ -18,16 +22,19 @@ renders the same shared state.
 |---|---|---|
 | Monitor engine (owns the `gpumon.py` process + state file) | `Service.qml` | `service` |
 | Bar pill + detail panel | `BarWidget.qml` | `bar-widget` |
-| AMD sysfs reader | `gpumon.py` | — |
+| AMD sysfs / NVIDIA `nvidia-smi` reader | `gpumon.py` | — |
 
-The widget is **always visible** even when no AMD card is detected — it shows
-"GPU —" instead of a readout, so you can tell at a glance that the data source
-isn't being found.
+The widget is **always visible** even when no supported GPU is detected — it
+shows "GPU —" instead of a readout, so you can tell at a glance that the data
+source isn't being found.
 
 ## Requirements
 
-- An AMD GPU on the `amdgpu` driver with `gpu_busy_percent` exposed
-  (RDNA-era cards and later).
+- A supported GPU:
+  - **AMD** on the `amdgpu` driver with `gpu_busy_percent` exposed
+    (RDNA-era cards and later), read from sysfs.
+  - **NVIDIA** with the proprietary `nvidia` driver and `nvidia-smi` on
+    `PATH` (reads fine as a normal user).
 - `python3` (Arch base already includes it).
 - Omarchy 4.x with the stock shell bar.
 
@@ -96,16 +103,23 @@ entry:
 
 `Service.qml` (a single instance, one per shell — never one per monitor) runs
 one long-lived `/usr/bin/python3 gpumon.py --state-file /tmp/davidjm-gpu-state.json`
-that re-reads the amdgpu sysfs tree every second and overwrites a small JSON
+that re-reads live GPU counters every second and overwrites a small JSON
 state file in place (never tmp+rename — the watcher binds to the file's
 inode). A `FileView` watches the file and republishes the parsed object as
-`service.state`; every bar widget binds to it. `gpumon.py` auto-detects the
-first card exposing `gpu_busy_percent` (with an `amdgpu` hwmon), needs no
-elevation, and is pure Python stdlib.
+`service.state`; every bar widget binds to it. `gpumon.py` needs no elevation
+and is pure Python stdlib.
 
-Actives clocks are read from the `pp_dpm_sclk` / `pp_dpm_mclk` tables, taking
-the `*`-marked state — including the `S:` (stable) state modern cards label
-their lowest power level with.
+AMD is detected as the first card exposing `gpu_busy_percent` (with an
+`amdgpu` hwmon). Active clocks come from the `pp_dpm_sclk` / `pp_dpm_mclk`
+tables, taking the `*`-marked state — including the `S:` (stable) state
+modern cards label their lowest power level with.
+
+When no AMD card is found, `gpumon.py` falls back to NVIDIA: it shells out to
+`nvidia-smi --query-gpu=...` (name, utilization, VRAM, temperature, power,
+`clocks.sm` / `clocks.mem`, fan) once per tick and maps the first GPU onto the
+same state keys — utilization + core temperature on the pill, clocks and VRAM
+in the panel. Fan speed shows as "—" because `nvidia-smi` only reports a
+percentage, not RPM.
 
 If the helper ever dies the service restarts it after a short debounce; the
 first write lands at startup so the readout is never blank at login.
