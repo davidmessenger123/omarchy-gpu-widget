@@ -165,12 +165,22 @@ BarWidget {
         spacing: Style.space(8)
 
         Text {
-          text: "GPU MONITOR" + (root.state && root.state.card ? "  " + root.state.card.toUpperCase() : "")
+          text: "GPU MONITOR"
           color: Color.accent
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.bold: true
           font.letterSpacing: 2
+        }
+
+        Text {
+          text: root.state && root.state.card ? root.state.card : "—"
+          color: Qt.darker(Color.foreground, 1.4)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+          elide: Text.ElideRight
+          Layout.fillWidth: true
+          Layout.topMargin: -4
         }
 
         RowLayout {
