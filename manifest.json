@@ -1,0 +1,39 @@
+{
+  "$schema": "https://raw.githubusercontent.com/omarchy/omarchy/main/schemas/plugin.json",
+  "schemaVersion": 1,
+  "id": "davidjm.gpu",
+  "name": "GPU Monitor",
+  "version": "1.1.0",
+  "author": "David JM",
+  "license": "MIT",
+  "description": "Live view of the AMD graphics card straight from sysfs: utilization, clocks, temperatures, power draw, fan speed and VRAM usage. One shared service owns a single helper process that feeds every bar surface.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "GPU Monitor",
+    "description": "A monitor glyph showing GPU utilization and junction temperature, refreshed every second from the amdgpu sysfs tree. Left-click opens a panel with clocks, VRAM, power, fan and per-sensor temperatures. Read-only and unprivileged — no helpers, no elevation.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "hotTemp": "95"
+    },
+    "schema": [
+      {
+        "key": "hotTemp",
+        "type": "enum",
+        "label": "Hot temperature",
+        "options": ["85", "90", "95", "100", "105"],
+        "defaultValue": "95",
+        "description": "Turn the readout red when the GPU junction temperature reaches or exceeds this (°C)."
+      }
+    ]
+  }
+}
