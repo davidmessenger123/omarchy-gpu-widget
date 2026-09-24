@@ -2,60 +2,186 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// GPU monitor engine — the shared service behind every davidjm.gpu bar
-// surface.
-//
-// The bar renders one widget per monitor, but a single Service instance
-// (enabled via the `plugins` array in shell.json) owns the one long-lived
-// `gpumon.py` process and the state file it publishes. Bar widgets on every
-// screen bind to `service.state`, so the number of monitors no longer
-// multiplies helper processes.
-//
-//   bar.shell.serviceFor("davidjm.gpu")
 Item {
   id: root
 
-  // Live board state, published to every widget. Keys: present, vendor,
-  // card, util, memUtil, sclkMhz, mclkMhz, tempEdge, tempJunction, tempMem,
-  // powerW, fanRpm, vramUsedG, vramTotalG.
   property var state: ({})
 
-  // Absolute path to this plugin's folder (trailing slash), resolved from the
-  // QML itself so the helper is found wherever the plugin lives.
-  readonly property string pluginDir: String(Qt.resolvedUrl(".")).replace(/^file:\/\//, "")
+  readonly property string pluginDir: {
+    var path = String(Qt.resolvedUrl(".")).replace(/^file:\/\//, "")
+    return path.charAt(path.length - 1) === "/" ? path : path + "/"
+  }
+  readonly property string runtimeDir: {
+    var value = ""
+    if (typeof Quickshell.env === "function") {
+      var environmentValue = Quickshell.env("XDG_RUNTIME_DIR")
+      if (environmentValue !== null && environmentValue !== undefined)
+        value = String(environmentValue)
+    }
+    value = value.replace(/\/+$/, "")
+    if (value.charAt(0) !== "/" || /[\x00-\x1f]/.test(value)) return ""
+    return value
+  }
+  readonly property string stateDir: root.runtimeDir === ""
+    ? "" : root.runtimeDir + "/omarchy-gpu-widget"
+  readonly property string statePath: root.stateDir === ""
+    ? "" : root.stateDir + "/davidjm-gpu-state.json"
+  readonly property var processEnvironment: ({
+    "XDG_RUNTIME_DIR": root.runtimeDir,
+    "PATH": "/usr/bin:/bin"
+  })
 
-  readonly property string statePath: "/tmp/davidjm-gpu-state.json"
-
-  // One long-lived `gpumon.py` writes the state to a file every second; a
-  // FileView watches it. First write lands immediately so the readout isn't
-  // blank at login; restart with a debounce if the monitoring process dies.
   Process {
     id: monitorProc
-    command: ["/usr/bin/python3", root.pluginDir + "gpumon.py",
-              "--state-file", root.statePath]
-    running: true
-    onExited: monitorRestart.restart()
+    command: root.statePath === "" ? [] : [
+      "/usr/bin/python3", root.pluginDir + "gpumon.py",
+      "--state-file", root.statePath
+    ]
+    clearEnvironment: true
+    environment: root.processEnvironment
+    running: root.statePath !== ""
+    onExited: {
+      if (root.statePath !== "") monitorRestart.restart()
+    }
   }
-  Timer { id: monitorRestart; interval: 3000; onTriggered: monitorProc.running = true }
+
+  Timer {
+    id: monitorRestart
+    interval: 3000
+    onTriggered: if (root.statePath !== "") monitorProc.running = true
+  }
 
   FileView {
     id: stateFile
     path: root.statePath
-    watchChanges: true
+    watchChanges: root.statePath !== ""
     printErrors: false
-    onFileChanged: reload()
+    onFileChanged: {
+      reload()
+      Qt.callLater(root.refresh)
+    }
     onTextChanged: root.parseState(stateFile.text())
   }
 
-  function parseState(text) {
-    var json = {}
-    try { json = JSON.parse(text) } catch (e) { json = {} }
-    if (json.present !== undefined) root.state = json
+  Timer {
+    interval: 1000
+    repeat: true
+    running: root.statePath !== ""
+    onTriggered: if (root.statePath !== "") stateFile.reload()
   }
 
-  // Middle-click "re-read": force the state FileView to re-read its file now.
+  function numberOrNull(value, minimum, maximum) {
+    if (value === null || value === undefined) return null
+    if (typeof value !== "number" || !isFinite(value)) return undefined
+    if (value < minimum || value > maximum) return undefined
+    return value
+  }
+
+  function parseState(text) {
+    if (typeof text !== "string" || text.length > 65536) return
+    var value
+    try { value = JSON.parse(text) } catch (e) { return }
+    if (!value || typeof value !== "object" || Array.isArray(value)) return
+    var required = [
+      "schema", "present", "vendor", "card", "util", "memUtil", "sclkMhz", "mclkMhz",
+      "tempEdge", "tempJunction", "tempMem", "tempGpu", "powerW", "fanRpm",
+      "vramUsedG", "vramTotalG", "tempSensors", "alertTemp", "alertLabel"
+    ]
+    for (var requiredIndex = 0; requiredIndex < required.length; requiredIndex++) {
+      if (!Object.prototype.hasOwnProperty.call(value, required[requiredIndex])) return
+    }
+    if (value.schema !== 1 || typeof value.present !== "boolean") return
+    var clean = {
+      schema: 1,
+      present: value.present,
+      vendor: null,
+      card: null,
+      util: null,
+      memUtil: null,
+      sclkMhz: null,
+      mclkMhz: null,
+      tempEdge: null,
+      tempJunction: null,
+      tempMem: null,
+      tempGpu: null,
+      powerW: null,
+      fanRpm: null,
+      vramUsedG: null,
+      vramTotalG: null,
+      tempSensors: [],
+      alertTemp: null,
+      alertLabel: ""
+    }
+    if (!value.present) {
+      var absentFields = [
+        "vendor", "card", "util", "memUtil", "sclkMhz", "mclkMhz", "tempEdge",
+        "tempJunction", "tempMem", "tempGpu", "powerW", "fanRpm", "vramUsedG",
+        "vramTotalG", "alertTemp"
+      ]
+      for (var absentIndex = 0; absentIndex < absentFields.length; absentIndex++) {
+        if (value[absentFields[absentIndex]] !== null) return
+      }
+      if (!Array.isArray(value.tempSensors) || value.tempSensors.length !== 0 || value.alertLabel !== "") return
+      root.state = clean
+      return
+    }
+    if (value.vendor !== "AMD" && value.vendor !== "NVIDIA") return
+    if (typeof value.card !== "string" || value.card.length === 0 || value.card.length > 128 || /[\x00-\x1f]/.test(value.card)) return
+    clean.vendor = value.vendor
+    clean.card = value.card
+    var fields = [
+      ["util", 0, 100], ["memUtil", 0, 100],
+      ["sclkMhz", 0, 1000000], ["mclkMhz", 0, 1000000],
+      ["tempEdge", -100, 200], ["tempJunction", -100, 200],
+      ["tempMem", -100, 200], ["tempGpu", -100, 200],
+      ["powerW", 0, 1000000], ["fanRpm", 0, 1000000],
+      ["vramUsedG", 0, 1000000], ["vramTotalG", 0, 1000000]
+    ]
+    for (var i = 0; i < fields.length; i++) {
+      var field = fields[i][0]
+      var parsed = root.numberOrNull(value[field], fields[i][1], fields[i][2])
+      if (parsed === undefined) return
+      clean[field] = parsed
+    }
+    if (clean.vendor === "NVIDIA" && clean.tempJunction !== null) return
+    if (value.tempSensors !== undefined && !Array.isArray(value.tempSensors)) return
+    if (Array.isArray(value.tempSensors)) {
+      if (value.tempSensors.length > 32) return
+      var seenSensors = {}
+      for (var s = 0; s < value.tempSensors.length; s++) {
+        var sensor = value.tempSensors[s]
+        if (!sensor || typeof sensor !== "object" || Array.isArray(sensor)) return
+        if (typeof sensor.label !== "string" || sensor.label.length === 0 || sensor.label.length > 64 || /[\x00-\x1f]/.test(sensor.label)) return
+        if (["edge", "junction", "memory", "core", "gpu", "unknown"].indexOf(sensor.kind) < 0) return
+        if (clean.vendor === "NVIDIA" && sensor.kind === "junction") return
+        var sensorValue = root.numberOrNull(sensor.value, -100, 200)
+        if (sensorValue === undefined || sensorValue === null) return
+        var sensorIdentity = sensor.label + "\u0000" + sensor.kind
+        if (seenSensors[sensorIdentity] === true) return
+        seenSensors[sensorIdentity] = true
+        clean.tempSensors.push({ label: sensor.label, value: sensorValue, kind: sensor.kind })
+      }
+    }
+    if (clean.vramUsedG !== null && clean.vramTotalG !== null && clean.vramUsedG > clean.vramTotalG) return
+    var alertTemp = root.numberOrNull(value.alertTemp, -100, 200)
+    if (alertTemp === undefined || typeof value.alertLabel !== "string" || value.alertLabel.length > 32 || /[\x00-\x1f]/.test(value.alertLabel)) return
+    var expectedAlertTemp = null
+    var expectedAlertLabel = ""
+    if (clean.vendor === "AMD" && clean.tempJunction !== null) {
+      expectedAlertTemp = clean.tempJunction
+      expectedAlertLabel = "Junction"
+    } else if (clean.vendor === "NVIDIA" && clean.tempGpu !== null) {
+      expectedAlertTemp = clean.tempGpu
+      expectedAlertLabel = "GPU core"
+    }
+    if (alertTemp !== expectedAlertTemp || value.alertLabel !== expectedAlertLabel) return
+    clean.alertTemp = alertTemp
+    clean.alertLabel = value.alertLabel
+    root.state = clean
+  }
+
   function refresh() {
-    stateFile.reload()
+    if (root.statePath !== "") stateFile.reload()
   }
 
   Component.onCompleted: root.refresh()

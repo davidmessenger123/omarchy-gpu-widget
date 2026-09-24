@@ -21,8 +21,9 @@ BarWidget {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  // The readout turns red once the junction temperature reaches this (°C).
+  // The readout turns red once the selected GPU temperature reaches this (°C).
   property string hotTemp: String(root.effective("hotTemp", "95"))
+  readonly property var primaryTemperature: root.getPrimaryTemperature()
 
   // Live board state, published by the shared service instance.
   readonly property var svc: bar && bar.shell
@@ -56,24 +57,63 @@ BarWidget {
   }
 
   function pct(value) {
+    if (value === null || value === undefined) return "-"
     var n = Number(value)
     if (!isFinite(n)) return "-"
     return Math.round(n) + "%"
   }
 
   function one(value, unit) {
+    if (value === null || value === undefined) return "-"
     var n = Number(value)
     if (!isFinite(n)) return "-"
     return n + (unit !== undefined ? unit : "")
   }
 
   function tempC(value) {
+    if (value === null || value === undefined) return "-°C"
     var n = Number(value)
     if (!isFinite(n)) return "-°C"
     return Math.round(n) + "°C"
   }
 
+  function getPrimaryTemperature() {
+    if (!root.state || root.state.present !== true) return null
+    if (root.state.vendor === "AMD" && root.state.tempJunction !== null &&
+        root.state.tempJunction !== undefined && isFinite(Number(root.state.tempJunction)))
+      return { label: "Junction", value: Number(root.state.tempJunction) }
+    if (root.state.vendor === "NVIDIA" && root.state.tempGpu !== null &&
+        root.state.tempGpu !== undefined && isFinite(Number(root.state.tempGpu)))
+      return { label: "GPU core", value: Number(root.state.tempGpu) }
+    return null
+  }
+
+  function temperatureRows() {
+    var rows = []
+    if (root.state && Array.isArray(root.state.tempSensors)) {
+      for (var i = 0; i < root.state.tempSensors.length && rows.length < 32; i++) {
+        var sensor = root.state.tempSensors[i]
+        if (!sensor || typeof sensor.label !== "string" || sensor.value === null || sensor.value === undefined) continue
+        var value = Number(sensor.value)
+        if (!isFinite(value)) continue
+        rows.push({ label: sensor.label, value: root.tempC(value) })
+      }
+    }
+    if (rows.length === 0 && root.state && root.state.present === true) {
+      if (root.state.tempEdge !== null && root.state.tempEdge !== undefined)
+        rows.push({ label: "Edge", value: root.tempC(root.state.tempEdge) })
+      if (root.state.tempJunction !== null && root.state.tempJunction !== undefined)
+        rows.push({ label: "Junction", value: root.tempC(root.state.tempJunction) })
+      if (root.state.tempGpu !== null && root.state.tempGpu !== undefined)
+        rows.push({ label: "GPU core", value: root.tempC(root.state.tempGpu) })
+      if (root.state.tempMem !== null && root.state.tempMem !== undefined)
+        rows.push({ label: "Memory", value: root.tempC(root.state.tempMem) })
+    }
+    return rows
+  }
+
   function ghz(mhz) {
+    if (mhz === null || mhz === undefined) return "-"
     var n = Number(mhz)
     if (!isFinite(n) || n <= 0) return "-"
     return (n >= 1000 ? (n / 1000).toFixed(2) + " GHz" : Math.round(n) + " MHz")
@@ -118,10 +158,13 @@ BarWidget {
     // \uEFC5 = fa-memory (Font Awesome 6 RAM stick) — reads as GPU/VRAM and
     // stays distinct from the CPU microchip (\uF2DB, used by cpu-clock).
     text: root.state && root.state.present === true
-      ? "\uEFC5  " + root.pct(root.state.util) + "  " + root.tempC(root.state.tempJunction)
+      ? "\uEFC5  " + root.pct(root.state.util) + "  " + (root.primaryTemperature
+        ? root.tempC(root.primaryTemperature.value) : "GPU —")
       : "\uEFC5  GPU —"
     tooltipText: "GPU " + (root.state && root.state.present === true
-      ? root.pct(root.state.util) + "·" + root.tempC(root.state.tempJunction)
+      ? root.pct(root.state.util) + "·" + (root.primaryTemperature
+        ? root.primaryTemperature.label + " " + root.tempC(root.primaryTemperature.value)
+        : "temperature —")
         + (root.state.memUtil !== undefined && root.state.memUtil !== null ? " · mem " + root.pct(root.state.memUtil) : "")
         + (root.state.sclkMhz !== undefined && root.state.sclkMhz !== null ? " · sclk " + root.ghz(root.state.sclkMhz) : "")
         + (root.state.mclkMhz !== undefined && root.state.mclkMhz !== null ? " · mclk " + root.ghz(root.state.mclkMhz) : "")
@@ -132,11 +175,8 @@ BarWidget {
       : "not detected")
       + " — left panel · middle refresh"
     horizontalMargin: 6
-    // active paints the whole button in bar.urgent (red warning) — keep it
-    // strictly for a real alert so the readout only turns red when hot.
-    active: root.state && root.state.present === true
-            && root.state.tempJunction !== undefined && root.state.tempJunction !== null
-            && Number(root.state.tempJunction) >= Number(root.hotTemp)
+    active: root.primaryTemperature !== null
+            && root.primaryTemperature.value >= Number(root.hotTemp)
 
     onPressed: function(mouseButton) {
       if (mouseButton === Qt.MiddleButton) root.refreshState()
@@ -314,11 +354,7 @@ BarWidget {
           Layout.fillWidth: true
 
           Repeater {
-            model: [
-              { label: "Edge", value: root.tempC(root.state.tempEdge) },
-              { label: "Junction", value: root.tempC(root.state.tempJunction) },
-              { label: "Memory", value: root.tempC(root.state.tempMem) }
-            ]
+            model: root.temperatureRows()
 
             Rectangle {
               required property var modelData

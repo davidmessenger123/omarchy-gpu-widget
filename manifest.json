@@ -18,7 +18,7 @@
   },
   "barWidget": {
     "displayName": "GPU Monitor",
-    "description": "A monitor glyph showing GPU utilization and junction temperature, refreshed every second. AMD is read from the amdgpu sysfs tree, NVIDIA via nvidia-smi. Left-click opens a panel with clocks, VRAM, power, fan and per-sensor temperatures. Read-only and unprivileged — no elevation.",
+    "description": "A monitor glyph showing GPU utilization and the selected temperature sensor, refreshed every second. AMD is read from the amdgpu sysfs tree with labeled sensors; NVIDIA is read via validated nvidia-smi output and labeled GPU core. Left-click opens a panel with clocks, VRAM, power, fan and per-sensor temperatures. Read-only and unprivileged — no elevation.",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right",
@@ -32,7 +32,7 @@
         "label": "Hot temperature",
         "options": ["85", "90", "95", "100", "105"],
         "defaultValue": "95",
-        "description": "Turn the readout red when the GPU junction temperature reaches or exceeds this (°C)."
+        "description": "Turn the readout red when the selected GPU temperature sensor reaches or exceeds this (°C)."
       }
     ]
   }
