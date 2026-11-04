@@ -594,10 +594,14 @@ def validate_state(value):
             raise StateValidationError("integrated GPU metadata is invalid")
         if not isinstance(igpu.get("card"), str) or not igpu["card"] or len(igpu["card"]) > 128:
             raise StateValidationError("integrated GPU card is invalid")
+        clean_igpu = {"vendor": "Intel", "card": igpu["card"]}
         for field in ("freqMhz", "maxMhz", "util"):
             item = igpu.get(field)
-            if item is not None:
-                _number(item, "sclkMhz" if field != "util" else "util")
+            if item is None:
+                clean_igpu[field] = None
+            else:
+                clean_igpu[field] = _number(item, "sclkMhz" if field != "util" else "util")
+        result["igpu"] = clean_igpu
     if not present:
         if value["vendor"] is not None or value["card"] is not None:
             raise StateValidationError("absent state has device metadata")
