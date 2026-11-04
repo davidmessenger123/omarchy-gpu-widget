@@ -174,6 +174,10 @@ BarWidget {
         + (root.state.fanRpm !== undefined && root.state.fanRpm !== null && root.state.fanRpm > 0 ? " · " + root.state.fanRpm + " rpm" : "")
         + (root.state.vramUsedG !== undefined && root.state.vramUsedG !== null ? " · VRAM " + root.one(root.state.vramUsedG, "G")
            + (root.state.vramTotalG ? "/" + root.one(root.state.vramTotalG, "G") : "") : "")
+        + (root.state.igpu
+           ? " · iGPU " + root.pct(root.state.igpu.util)
+             + (root.state.igpu.freqMhz !== null ? " " + root.state.igpu.freqMhz + " MHz" : "")
+           : "")
       : "not detected")
       + " — left panel · middle refresh"
     horizontalMargin: 6
@@ -313,6 +317,37 @@ BarWidget {
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           Layout.alignment: Qt.AlignRight
+        }
+
+        RowLayout {
+          visible: root.state.igpu !== undefined && root.state.igpu !== null
+          Layout.fillWidth: true
+          spacing: Style.space(6)
+
+          Text {
+            text: "INTEL IGPU"
+            color: Color.accent
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            font.letterSpacing: 1.2
+            Layout.fillWidth: true
+          }
+          Text {
+            text: root.state.igpu && root.state.igpu.util !== null
+              ? root.pct(root.state.igpu.util) : "—"
+            color: Color.foreground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+          Text {
+            text: root.state.igpu && root.state.igpu.freqMhz !== null
+              ? root.state.igpu.freqMhz + " MHz" : "—"
+            color: Qt.darker(Color.foreground, 1.15)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
         }
 
         RowLayout {

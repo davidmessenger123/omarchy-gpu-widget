@@ -205,6 +205,19 @@ class GpuTests(unittest.TestCase):
         self.assertEqual(second["vendor"], "NVIDIA")
         self.assertEqual(run.call_count, 1)
 
+    def test_rc6_utilization_is_bounded_and_rejects_bad_samples(self):
+        self.assertEqual(GPU._rc6_utilization(100, 100, 1000), 100.0)
+        self.assertEqual(GPU._rc6_utilization(100, 1100, 1000), 0.0)
+        self.assertIsNone(GPU._rc6_utilization(None, 100, 1000))
+        self.assertIsNone(GPU._rc6_utilization(100, 100, 0))
+        self.assertIsNone(GPU._rc6_utilization(200, 100, 1000))
+
+    def test_qml_exposes_integrated_gpu_and_compute_processes(self):
+        source = (Path(__file__).parents[1] / "Service.qml").read_text(encoding="utf-8")
+        self.assertIn('igpu', source)
+        self.assertIn('gpuProcesses', source)
+        self.assertIn('setDetailOpen', source)
+
     def test_qml_has_complete_schema_and_inode_replacement_fallback(self):
         source = (Path(__file__).parents[1] / "Service.qml").read_text(encoding="utf-8")
         self.assertIn('"schema", "present", "vendor", "card"', source)

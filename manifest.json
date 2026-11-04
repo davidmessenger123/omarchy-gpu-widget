@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "id": "davidjm.gpu",
   "name": "GPU Monitor",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "author": "David JM",
   "license": "MIT",
   "description": "Live view of the graphics card: utilization, clocks, temperatures, power draw, fan speed and VRAM usage. AMD is read straight from the amdgpu sysfs tree; NVIDIA falls back to nvidia-smi. One shared service owns a single helper process that feeds every bar surface.",

@@ -92,6 +92,17 @@ Item {
     return value
   }
 
+  function parseIgpu(value) {
+    if (value === undefined || value === null) return null
+    if (typeof value !== "object" || Array.isArray(value) || value.vendor !== "Intel") return undefined
+    if (typeof value.card !== "string" || value.card.length === 0 || value.card.length > 128 || /[\x00-\x1f]/.test(value.card)) return undefined
+    var freq = root.numberOrNull(value.freqMhz, 0, 100000)
+    var maximum = root.numberOrNull(value.maxMhz, 0, 100000)
+    var util = root.numberOrNull(value.util, 0, 100)
+    if (freq === undefined || maximum === undefined || util === undefined) return undefined
+    return { vendor: "Intel", card: value.card, freqMhz: freq, maxMhz: maximum, util: util }
+  }
+
   function parseState(text) {
     if (typeof text !== "string" || text.length > 65536) return
     var value
@@ -125,8 +136,12 @@ Item {
       vramTotalG: null,
       tempSensors: [],
       alertTemp: null,
-      alertLabel: ""
+      alertLabel: "",
+      igpu: null
     }
+    var igpu = root.parseIgpu(value.igpu)
+    if (igpu === undefined) return
+    clean.igpu = igpu
     if (!value.present) {
       var absentFields = [
         "vendor", "card", "util", "memUtil", "sclkMhz", "mclkMhz", "tempEdge",

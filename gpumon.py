@@ -183,6 +183,51 @@ def _read_float(path):
     return value if math.isfinite(value) else None
 
 
+_IGPU_CACHE = {"card": "", "time": 0.0, "rc6": None}
+
+
+def _bounded_int(path, upper):
+    value = _read_int(path)
+    return value if value is not None and 0 <= value <= upper else None
+
+
+def _rc6_utilization(previous_ms, current_ms, elapsed_ms):
+    if previous_ms is None or current_ms is None or elapsed_ms <= 0:
+        return None
+    delta = current_ms - previous_ms
+    if delta < 0 or delta > elapsed_ms * 1.5:
+        return None
+    return round(max(0.0, min(100.0, (1.0 - delta / elapsed_ms) * 100.0)), 1)
+
+
+def intel_igpu_state():
+    """Best-effort Intel iGPU frequency and RC6-based utilization."""
+    global _IGPU_CACHE
+    for card in sorted(glob.glob("/sys/class/drm/card[0-9]*")):
+        if _read(os.path.join(card, "device", "vendor")) != "0x8086":
+            continue
+        freq = _bounded_int(os.path.join(card, "gt_cur_freq_mhz"), 100000)
+        maximum = _bounded_int(os.path.join(card, "gt_max_freq_mhz"), 100000)
+        if freq is None:
+            freq = _bounded_int(os.path.join(card, "gt", "gt0", "rps_cur_freq_mhz"), 100000)
+        if maximum is None:
+            maximum = _bounded_int(os.path.join(card, "gt", "gt0", "rps_max_freq_mhz"), 100000)
+        rc6 = _bounded_int(os.path.join(card, "gt", "gt0", "rc6_residency_ms"), 1 << 62)
+        now = time.monotonic()
+        util = None
+        if _IGPU_CACHE["card"] == card and _IGPU_CACHE["rc6"] is not None and rc6 is not None:
+            util = _rc6_utilization(_IGPU_CACHE["rc6"], rc6, (now - _IGPU_CACHE["time"]) * 1000.0)
+        _IGPU_CACHE = {"card": card, "time": now, "rc6": rc6}
+        return {
+            "vendor": "Intel",
+            "card": os.path.basename(card)[:128],
+            "freqMhz": freq,
+            "maxMhz": maximum,
+            "util": util,
+        }
+    return None
+
+
 def find_card():
     for card in sorted(glob.glob("/sys/class/drm/card[0-9]*")):
         dev = os.path.join(card, "device")
@@ -502,11 +547,14 @@ def _query_nvidia_state(binary=None):
 def get_state():
     card, dev = find_card()
     if dev is not None:
-        return _amd_state(card, dev)
-    nvidia = _nvidia_state()
-    if nvidia is not None:
-        return nvidia
-    return empty_state()
+        state = _amd_state(card, dev)
+    else:
+        nvidia = _nvidia_state()
+        state = nvidia if nvidia is not None else empty_state()
+    igpu = intel_igpu_state()
+    if igpu is not None:
+        state["igpu"] = igpu
+    return state
 
 
 def _number(value, field):
@@ -540,6 +588,16 @@ def validate_state(value):
         raise StateValidationError("state presence is invalid")
     result = empty_state()
     result["present"] = present
+    if "igpu" in value and value["igpu"] is not None:
+        igpu = value["igpu"]
+        if not isinstance(igpu, dict) or igpu.get("vendor") != "Intel":
+            raise StateValidationError("integrated GPU metadata is invalid")
+        if not isinstance(igpu.get("card"), str) or not igpu["card"] or len(igpu["card"]) > 128:
+            raise StateValidationError("integrated GPU card is invalid")
+        for field in ("freqMhz", "maxMhz", "util"):
+            item = igpu.get(field)
+            if item is not None:
+                _number(item, "sclkMhz" if field != "util" else "util")
     if not present:
         if value["vendor"] is not None or value["card"] is not None:
             raise StateValidationError("absent state has device metadata")
