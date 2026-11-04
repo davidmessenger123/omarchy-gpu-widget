@@ -195,12 +195,23 @@ class GpuTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             GPU.main(["--interval", str(GPU.MAX_INTERVAL + 1)])
 
+    def test_nvidia_query_is_cached_between_ticks(self):
+        output = b"Test GPU, 10, 1024, 2048, 70, 50, 1200, 600, 30\n"
+        GPU._NVIDIA_CACHE_SET = False
+        with mock.patch.object(GPU, "_run_nvidia", return_value=(0, output)) as run:
+            first = GPU._nvidia_state()
+            second = GPU._nvidia_state()
+        self.assertEqual(first["vendor"], "NVIDIA")
+        self.assertEqual(second["vendor"], "NVIDIA")
+        self.assertEqual(run.call_count, 1)
+
     def test_qml_has_complete_schema_and_inode_replacement_fallback(self):
         source = (Path(__file__).parents[1] / "Service.qml").read_text(encoding="utf-8")
         self.assertIn('"schema", "present", "vendor", "card"', source)
         self.assertIn("value.schema !== 1", source)
-        self.assertIn("onFileChanged: {", source)
-        self.assertIn("Qt.callLater(root.refresh)", source)
+        self.assertIn("onFileChanged: reload()", source)
+        self.assertNotIn("Qt.callLater(root.refresh)", source)
+        self.assertIn("text === root.lastStateText", source)
         self.assertIn("onTriggered: if (root.statePath !== \"\") stateFile.reload()", source)
 
 

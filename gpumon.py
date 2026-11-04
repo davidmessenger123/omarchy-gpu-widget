@@ -21,6 +21,7 @@ import time
 DEFAULT_STATE = ""
 DEFAULT_INTERVAL = 1.0
 MAX_INTERVAL = 3600.0
+NVIDIA_CACHE_SECONDS = 3.0
 STATE_DIRNAME = "omarchy-gpu-widget"
 STATE_FILENAME = "davidjm-gpu-state.json"
 STATE_SCHEMA = 1
@@ -446,7 +447,26 @@ def _nv_num(raw):
     return number if math.isfinite(number) else None
 
 
+_NVIDIA_CACHE_TIME = 0.0
+_NVIDIA_CACHE_VALUE = None
+_NVIDIA_CACHE_SET = False
+
+
 def _nvidia_state(binary=None):
+    global _NVIDIA_CACHE_TIME, _NVIDIA_CACHE_VALUE, _NVIDIA_CACHE_SET
+    if binary is not None:
+        return _query_nvidia_state(binary)
+    now = time.monotonic()
+    if _NVIDIA_CACHE_SET and now - _NVIDIA_CACHE_TIME < NVIDIA_CACHE_SECONDS:
+        return dict(_NVIDIA_CACHE_VALUE) if _NVIDIA_CACHE_VALUE is not None else None
+    value = _query_nvidia_state()
+    _NVIDIA_CACHE_TIME = now
+    _NVIDIA_CACHE_VALUE = value
+    _NVIDIA_CACHE_SET = True
+    return value
+
+
+def _query_nvidia_state(binary=None):
     rows = _nvidia_rows(binary)
     if not rows:
         return None
@@ -756,9 +776,14 @@ def write_state(state_file, state):
 
 def monitor(state_file, interval):
     last_error = None
+    last_payload = None
     while True:
         try:
-            write_state(state_file, get_state())
+            state = get_state()
+            payload = json.dumps(state, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            if payload != last_payload:
+                write_state(state_file, state)
+                last_payload = payload
             last_error = None
         except (StateSecurityError, StateValidationError, OSError, ValueError) as error:
             message = str(error)

@@ -6,6 +6,8 @@ Item {
   id: root
 
   property var state: ({})
+  property string lastStateText: ""
+  property int monitorFailures: 0
 
   readonly property string pluginDir: {
     var path = String(Qt.resolvedUrl(".")).replace(/^file:\/\//, "")
@@ -41,7 +43,10 @@ Item {
     environment: root.processEnvironment
     running: root.statePath !== ""
     onExited: {
-      if (root.statePath !== "") monitorRestart.restart()
+      if (root.statePath === "") return
+      root.monitorFailures = Math.min(root.monitorFailures + 1, 5)
+      monitorRestart.interval = Math.min(3000 * Math.pow(2, root.monitorFailures - 1), 60000)
+      monitorRestart.restart()
     }
   }
 
@@ -50,17 +55,25 @@ Item {
     interval: 3000
     onTriggered: if (root.statePath !== "") monitorProc.running = true
   }
+  Timer {
+    interval: 5000
+    repeat: false
+    running: monitorProc.running
+    onTriggered: root.monitorFailures = 0
+  }
 
   FileView {
     id: stateFile
     path: root.statePath
     watchChanges: root.statePath !== ""
     printErrors: false
-    onFileChanged: {
-      reload()
-      Qt.callLater(root.refresh)
+    onFileChanged: reload()
+    onTextChanged: {
+      var text = stateFile.text()
+      if (text === root.lastStateText) return
+      root.lastStateText = text
+      root.parseState(text)
     }
-    onTextChanged: root.parseState(stateFile.text())
   }
 
   Timer {
