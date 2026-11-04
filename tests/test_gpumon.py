@@ -213,6 +213,10 @@ class GpuTests(unittest.TestCase):
         self.assertNotIn("Qt.callLater(root.refresh)", source)
         self.assertIn("text === root.lastStateText", source)
         self.assertIn("onTriggered: if (root.statePath !== \"\") stateFile.reload()", source)
+        self.assertIn("gpuProcesses", source)
+        widget = (Path(__file__).parents[1] / "BarWidget.qml").read_text(encoding="utf-8")
+        self.assertIn("setDetailOpen", widget)
+        self.assertIn("GPU PROCESSES", widget)
 
 
 def stat_mode(path):

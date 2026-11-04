@@ -6,6 +6,8 @@ Item {
   id: root
 
   property var state: ({})
+  property var gpuProcesses: []
+  property bool detailOpen: false
   property string lastStateText: ""
   property int monitorFailures: 0
 
@@ -195,6 +197,49 @@ Item {
 
   function refresh() {
     if (root.statePath !== "") stateFile.reload()
+  }
+
+  function setDetailOpen(value) {
+    root.detailOpen = value === true
+    if (root.detailOpen && root.state.vendor === "NVIDIA" && !processProc.running)
+      processProc.running = true
+  }
+
+  function parseProcesses(text) {
+    var lines = String(text || "").split("\n")
+    var rows = []
+    for (var i = 0; i < lines.length && rows.length < 8; i++) {
+      var line = lines[i].trim()
+      if (!line) continue
+      var parts = line.split(",")
+      if (parts.length < 3) continue
+      var pid = Number(parts[0])
+      var memory = Number(parts[parts.length - 1])
+      if (!isFinite(pid) || !isFinite(memory)) continue
+      var name = parts.slice(1, parts.length - 1).join(",").trim()
+      if (!name) continue
+      rows.push({ pid: pid, name: name.slice(0, 64), memory: memory })
+    }
+    root.gpuProcesses = rows
+  }
+
+  Process {
+    id: processProc
+    command: ["/usr/bin/nvidia-smi",
+      "--query-compute-apps=pid,process_name,used_memory",
+      "--format=csv,noheader,nounits"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.parseProcesses(text)
+    }
+    stderr: StdioCollector { waitForEnd: true }
+  }
+
+  Timer {
+    interval: 3000
+    repeat: true
+    running: root.detailOpen && root.state.vendor === "NVIDIA"
+    onTriggered: if (!processProc.running) processProc.running = true
   }
 
   Component.onCompleted: root.refresh()

@@ -128,6 +128,8 @@ BarWidget {
     root.settingsOpen = !root.settingsOpen
   }
   function closeSettings() { root.settingsOpen = false }
+  onSettingsOpenChanged: if (root.svc) root.svc.setDetailOpen(root.settingsOpen)
+  Component.onCompleted: if (root.svc) root.svc.setDetailOpen(root.settingsOpen)
   // KeyboardPanel funnels outside-click dismissal and popout handoff through
   // `owner`; both call these.
   function close() { root.closeSettings() }
@@ -372,6 +374,49 @@ BarWidget {
                 color: root.base
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
+              }
+            }
+          }
+        }
+
+        Text {
+          visible: root.svc && root.svc.gpuProcesses.length > 0
+          text: "GPU PROCESSES"
+          color: Color.accent
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          font.bold: true
+          font.letterSpacing: 2
+          Layout.topMargin: Style.space(2)
+        }
+
+        Column {
+          visible: root.svc && root.svc.gpuProcesses.length > 0
+          Layout.fillWidth: true
+          spacing: Style.space(2)
+
+          Repeater {
+            model: root.svc && root.svc.gpuProcesses ? root.svc.gpuProcesses : []
+
+            delegate: Row {
+              width: parent.width
+
+              Text {
+                width: parent.width - processMemory.width - Style.space(6)
+                text: modelData.name + " · pid " + modelData.pid
+                color: root.base
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                elide: Text.ElideRight
+              }
+
+              Text {
+                id: processMemory
+                text: modelData.memory + " MB"
+                color: Qt.darker(Color.foreground, 1.15)
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                horizontalAlignment: Text.AlignRight
               }
             }
           }
